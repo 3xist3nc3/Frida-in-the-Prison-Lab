@@ -1,0 +1,332 @@
+------------------------------------------------------------
+-- tab 1: player
+------------------------------------------------------------
+
+p={
+ x=16,y=16,
+ w=16,h=16,
+ dx=0,dy=0,
+ on_ground=false,
+ face=1,
+
+ -- variable jump
+ jump_hold=0,
+
+ -- idle frames
+ spr_idle1=1,
+ spr_idle2=3,
+ spr_idlelook=5,
+
+ idle_t=0,
+ idle_frame=0,
+ idle_special_t=0,
+ look_t=0,
+
+ -- coyote time
+ coyote=0,
+
+ -- hitbox
+ hb_ox=4,
+ hb_oy=0,
+ hb_w=8,
+ hb_h=16,
+
+ -- animation
+ anim="idle",
+ anim_t=0,
+ spr_walk1=3,
+ spr_walk2=7,
+ spr_walk3=9,
+
+ -- jump/fall
+ spr_jump_up=11,
+ spr_fall=13,
+
+ -- attack state
+ has_sword=false,
+ attack_type="",
+ attack_t=0,
+ attack_lock=0,
+
+ -- kick frames
+ spr_kick_start=33,
+ spr_kick_end=35
+}
+
+function update_player()
+ local left=btn(0)
+ local right=btn(1)
+
+ local jump_pressed=btnp(4)
+ local jump_held=btn(4)
+ local attack_pressed=btnp(5)
+
+ if attack_pressed and not attack_active() then
+  start_attack()
+ end
+
+ local can_move = (p.attack_lock <= 0)
+
+ if can_move then
+  if left then
+   p.dx -= acc
+   p.face=-1
+  end
+
+  if right then
+   p.dx += acc
+   p.face=1
+  end
+ end
+
+ if p.dx > max_dx then p.dx=max_dx end
+ if p.dx < -max_dx then p.dx=-max_dx end
+
+ if (not left and not right) or not can_move then
+  local f = p.on_ground and fric_ground or fric_air
+  p.dx *= f
+  if abs(p.dx) < 0.10 then p.dx=0 end
+ end
+
+ if p.on_ground then
+  p.coyote=4
+ else
+  if p.coyote > 0 then p.coyote -= 1 end
+ end
+
+ if jump_pressed and (p.on_ground or p.coyote > 0) then
+--  sfx(04)
+  p.dy=jump_v
+  p.on_ground=false
+  p.coyote=0
+  p.jump_hold=jump_hold_max
+ end
+
+ if p.jump_hold > 0 and jump_held and p.dy < 0 then
+  p.dy -= jump_hold_boost
+  p.jump_hold -= 1
+ end
+
+ if (not jump_held) and p.dy < jump_cut then
+  p.dy=jump_cut
+  p.jump_hold=0
+ end
+
+ p.dy += grav
+ if p.dy > max_fall then p.dy=max_fall end
+
+ move_x(p.dx)
+ move_y(p.dy)
+
+ update_attack()
+ update_anim()
+ update_idle_anim()
+end
+
+function update_anim()
+ -- attack anim has highest priority
+ if p.attack_type=="kick_ground" then
+--  sfx(05)
+  p.anim="kick_ground"
+  return
+ elseif p.attack_type=="kick_air" then
+--  sfx(05)
+  p.anim="kick_air"
+  return
+ elseif p.attack_type=="sword" then
+  p.anim="sword"
+  return
+ end
+
+ if not p.on_ground then
+  if p.dy < 0 then
+   p.anim="jump_up"
+  else
+   p.anim="fall"
+  end
+  return
+ end
+
+ p.anim_t += 1
+
+ if abs(p.dx) > 0.15 then
+  p.anim="walk"
+ else
+  p.anim="idle"
+  p.anim_t=0
+ end
+end
+
+function update_idle_anim()
+ local no_input =
+  not btn(0) and not btn(1) and
+  not btn(2) and not btn(3) and
+  not btn(4) and not btn(5)
+
+ local still = abs(p.dx)<0.05 and abs(p.dy)<0.05 and p.on_ground
+
+ if no_input and still then
+  p.idle_special_t += 1
+
+  if p.look_t > 0 then
+   p.look_t -= 1
+   return
+  end
+
+  if p.idle_special_t > 200 and rnd(1) < 0.08 then
+   p.look_t=60
+   p.idle_special_t=0
+   return
+  end
+
+  p.idle_t += 1
+  if p.idle_t % 20 == 0 then
+   p.idle_frame = 1 - p.idle_frame
+  end
+ else
+  p.idle_t=0
+  p.idle_frame=0
+  p.idle_special_t=0
+  p.look_t=0
+ end
+end
+
+function start_attack()
+ if p.on_ground then
+  if p.has_sword then
+   p.attack_type="sword"
+  else
+   p.attack_type="kick_ground"
+   spawn_kick_fx()
+  end
+  p.attack_t=0
+  p.attack_lock=8
+ else
+  p.attack_type="kick_air"
+  p.attack_t=0
+  p.attack_lock=6
+  spawn_kick_fx()
+ end
+end
+
+function update_attack()
+ if p.attack_type=="" then return end
+
+ p.attack_t += 1
+
+ if p.attack_lock > 0 then
+  p.attack_lock -= 1
+ end
+
+ -- kick can hit world objects
+ if p.attack_type=="kick_ground" or p.attack_type=="kick_air" then
+  try_hit_attackables()
+ end
+
+ if p.attack_type=="kick_ground" then
+  if p.attack_t >= 8 then
+   p.attack_type=""
+   p.attack_t=0
+  end
+
+ elseif p.attack_type=="kick_air" then
+  if p.attack_t >= 6 then
+   p.attack_type=""
+   p.attack_t=0
+  end
+
+ elseif p.attack_type=="sword" then
+  -- placeholder for later
+  if p.attack_t >= 8 then
+   p.attack_type=""
+   p.attack_t=0
+  end
+ end
+end
+
+function attack_active()
+ return p.attack_type ~= ""
+end
+
+function try_hit_attackables()
+ local probe_y1=hb_y()+4
+ local probe_y2=hb_y()+hb_h()-4
+
+ for i=1,5 do
+  local probe_x
+
+  if p.face==1 then
+   probe_x=p.x+p.w+i
+  else
+   probe_x=p.x-i
+  end
+
+  if hit_enemy_at(probe_x,probe_y1) then return true end
+  if hit_enemy_at(probe_x,probe_y2) then return true end
+
+  if activate_button_at(probe_x,probe_y1) then return true end
+  if activate_button_at(probe_x,probe_y2) then return true end
+
+  if break_crate_at(probe_x,probe_y1) then return true end
+  if break_crate_at(probe_x,probe_y2) then return true end
+ end
+
+ return false
+end
+
+function draw_player()
+ local flip_x = (p.face==-1)
+ local s
+
+ if p.anim=="walk" then
+  local phase=flr((p.anim_t/6)%4)
+  if phase==0 then
+   s=p.spr_walk1
+  elseif phase==1 then
+   s=p.spr_walk2
+  elseif phase==2 then
+   s=p.spr_walk3
+  else
+   s=p.spr_walk2
+  end
+
+ elseif p.anim=="jump_up" then
+  s=p.spr_jump_up
+
+ elseif p.anim=="fall" then
+  s=p.spr_fall
+
+ elseif p.anim=="kick_ground" then
+  if p.attack_t < 4 then
+   s=p.spr_kick_start
+  else
+   s=p.spr_kick_end
+  end
+
+ elseif p.anim=="kick_air" then
+  s=p.spr_kick_end
+
+ elseif p.anim=="sword" then
+  s=p.spr_idle1
+
+ else
+  if p.look_t > 0 then
+   s=p.spr_idlelook
+  else
+   s=(p.idle_frame==1) and p.spr_idle2 or p.spr_idle1
+  end
+ end
+
+ -- hurt blink / invulnerability flicker
+ if hurt_cooldown > 0 then
+  if flr(hurt_cooldown/2)%2==0 then
+   return
+  end
+ end
+
+ spr(s,p.x,p.y,2,2,flip_x,false)
+
+ if debug_hitbox then
+  rect(hb_x(),hb_y(),hb_x()+hb_w()-1,hb_y()+hb_h()-1,8)
+ end
+end

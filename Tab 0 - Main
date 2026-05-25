@@ -1,0 +1,622 @@
+------------------------------------------------------------
+-- tab 0: main
+------------------------------------------------------------
+
+-- dev start
+dev_start=true
+dev_room_id="1-2"
+dev_spawn_tx=50
+dev_spawn_ty=12
+
+
+-- constants / settings
+grav=0.45
+max_fall=4
+acc=0.25
+fric_ground=0.50
+fric_air=0.92
+max_dx=2
+jump_v=-4
+
+jump_hold_max=6
+jump_hold_boost=0.35
+jump_cut=-1.2
+
+tile=8
+
+crate_tile=76
+crate_broken_tile=92
+
+spike_tile=126
+safe_floor_tile=65
+
+-- screen
+scr_w=128
+scr_h=128
+
+-- ui
+ui_h=16
+view_h=scr_h-ui_h
+
+-- lives
+start_lives=3
+lives=3
+
+-- hp
+start_hp=6
+hp=6
+max_hp=6
+
+-- damage / invulnerability
+hurt_cooldown=0
+hurt_cooldown_len=20
+
+-- debug (hold o+x to toggle)
+debug_hitbox=false
+debug_hold=0
+debug_hold_frames=30
+
+-- camera
+cam_x=0
+cam_y=0
+
+-- transition
+transition_active=false
+transition_t=0
+transition_len=30
+transition_switch_t=18
+transition_target_room_id=nil
+
+-- arrival effect
+arrival_fx_t=0
+arrival_fx_len=16
+
+-- death / game over states
+app_state="play" -- "play","death_respawn","game_over","quit"
+death_timer=0
+death_respawn_len=90 -- 3 sec @ 30fps
+game_over_sel=1 -- 1=restart, 2=quit
+
+-- saved map state for full reset
+saved_map_tiles={}
+
+-- room data
+rooms={
+ {
+  id="1-1",
+  x=0,
+  y=0,
+  w=46,
+  h=16,
+  spawn_tx=2,
+  spawn_ty=4
+ },
+
+ {
+  id="1-2",
+  x=48,
+  y=0,
+  w=16,
+  h=16,
+  spawn_tx=50,
+  spawn_ty=12
+ }
+}
+
+current_room=rooms[1]
+
+-- door sprites (world 1)
+door_w1_closed_spr=112
+door_w1_open_spr=113
+
+-- transition door sprites
+transition_door_closed_spr=121
+transition_door_open_spr=122
+
+-- button sprites
+button_off_spr=124
+button_on_spr=125
+
+-- doors
+doors={
+ {
+  id="door_1",
+  room_id="1-1",
+  tx=43,
+  ty=1,
+  closed_spr=door_w1_closed_spr,
+  open_spr=door_w1_open_spr,
+  is_open=false,
+  kind="normal"
+ },
+
+ {
+  id="door_2",
+  room_id="1-1",
+  tx=28,
+  ty=5,
+  closed_spr=door_w1_closed_spr,
+  open_spr=door_w1_open_spr,
+  is_open=false,
+  kind="normal"
+ },
+
+ {
+  id="transition_door_1",
+  room_id="1-1",
+  tx=1,
+  ty=13,
+  closed_spr=transition_door_closed_spr,
+  open_spr=transition_door_open_spr,
+  is_open=false,
+  kind="transition",
+  target_room_id="1-2"
+ }
+}
+
+-- buttons
+buttons={
+ {
+  id="button_1",
+  room_id="1-1",
+  tx=37,
+  ty=1,
+  off_spr=button_off_spr,
+  on_spr=button_on_spr,
+  is_on=false,
+  action="open_door",
+  target_door_id="door_1"
+ },
+
+ {
+  id="button_2",
+  room_id="1-1",
+  tx=10,
+  ty=9,
+  off_spr=button_off_spr,
+  on_spr=button_on_spr,
+  is_on=false,
+  action="open_door",
+  target_door_id="door_2"
+ },
+
+ {
+  id="button_3",
+  room_id="1-1",
+  tx=30,
+  ty=5,
+  off_spr=button_off_spr,
+  on_spr=button_on_spr,
+  is_on=false,
+  action="replace_tiles",
+
+  target_area_x=19,
+  target_area_y=15,
+  target_area_w=4,
+  target_area_h=1,
+
+  from_tile=spike_tile,
+  to_tile=safe_floor_tile
+ },
+
+ {
+  id="button_4",
+  room_id="1-1",
+  tx=6,
+  ty=10,
+  off_spr=button_off_spr,
+  on_spr=button_on_spr,
+  is_on=false,
+  action="open_door",
+  target_door_id="transition_door_1"
+ },
+
+ {
+  id="button_5",
+  room_id="1-2",
+  tx=62,
+  ty=2,
+  off_spr=button_off_spr,
+  on_spr=button_on_spr,
+  is_on=false,
+  action="raise_block",
+  target_block_id="block_1_2_door"
+ }
+}
+
+-- moving blocks / mechanisms
+moving_blocks={
+ {
+  id="block_1_2_door",
+  room_id="1-2",
+  tx=60,
+  ty=11,
+  w=3,
+  h=3,
+  target_ty=8,
+  y=11*8,
+  active=false,
+  done=false,
+  tiles={}
+ }
+}
+
+function apply_dev_start()
+ if not dev_start then return end
+
+ local r=find_room_by_id(dev_room_id)
+ if r then
+  current_room=r
+ end
+
+ respawn_player()
+
+ p.x=dev_spawn_tx*8
+ p.y=dev_spawn_ty*8
+ p.dx=0
+ p.dy=0
+
+ cam_x=current_room.x*8
+ cam_y=current_room.y*8
+end
+
+function find_room_by_id(id)
+ for r in all(rooms) do
+  if r.id==id then
+   return r
+  end
+ end
+ return nil
+end
+
+function save_initial_map_state()
+ saved_map_tiles={}
+
+ for r in all(rooms) do
+  for yy=0,r.h-1 do
+   for xx=0,r.w-1 do
+    local tx=r.x+xx
+    local ty=r.y+yy
+    add(saved_map_tiles,{
+     x=tx,
+     y=ty,
+     t=mget(tx,ty)
+    })
+   end
+  end
+ end
+end
+
+function restore_initial_map_state()
+ for cell in all(saved_map_tiles) do
+  mset(cell.x,cell.y,cell.t)
+ end
+end
+
+function reset_world_state()
+ for d in all(doors) do
+  d.is_open=false
+ end
+
+ for b in all(buttons) do
+  b.is_on=false
+ end
+
+ for mb in all(moving_blocks) do
+  mb.y=mb.ty*8
+  mb.active=false
+  mb.done=false
+  mb.tiles={}
+ end
+
+ restore_initial_map_state()
+end
+
+function respawn_player()
+ p.x=current_room.spawn_tx*8
+ p.y=current_room.spawn_ty*8
+ p.dx=0
+ p.dy=0
+ p.jump_hold=0
+ p.coyote=0
+ p.on_ground=false
+ p.anim="idle"
+ p.anim_t=0
+ p.attack_type=""
+ p.attack_t=0
+ p.attack_lock=0
+ p.has_sword=false
+
+ hp=start_hp
+ hurt_cooldown=0
+
+ transition_active=false
+ transition_t=0
+ transition_target_room_id=nil
+
+ arrival_fx_t=0
+
+ clear_particles()
+
+ cam_x=current_room.x*8
+ cam_y=current_room.y*8
+end
+
+function enter_room(room_id)
+ local r=find_room_by_id(room_id)
+ if not r then return end
+
+ current_room=r
+
+ p.x=current_room.spawn_tx*8
+ p.y=current_room.spawn_ty*8
+ p.dx=0
+ p.dy=0
+ p.jump_hold=0
+ p.coyote=0
+ p.on_ground=false
+ p.anim="idle"
+ p.anim_t=0
+ p.attack_type=""
+ p.attack_t=0
+ p.attack_lock=0
+
+ cam_x=current_room.x*8
+ cam_y=current_room.y*8
+
+ arrival_fx_t=arrival_fx_len
+end
+
+function start_room_transition(room_id)
+ if transition_active then return end
+ transition_active=true
+ transition_t=0
+ transition_target_room_id=room_id
+end
+
+function update_transition()
+ if not transition_active then return end
+
+ transition_t += 1
+
+ if transition_t == transition_switch_t then
+  enter_room(transition_target_room_id)
+ end
+
+ if transition_t >= transition_len then
+  transition_active=false
+  transition_t=0
+  transition_target_room_id=nil
+ end
+end
+
+function update_arrival_fx()
+ if arrival_fx_t > 0 then
+  arrival_fx_t -= 1
+ end
+end
+
+function update_hurt_cooldown()
+ if hurt_cooldown > 0 then
+  hurt_cooldown -= 1
+ end
+end
+
+function draw_transition_overlay()
+ if not transition_active then return end
+
+ local t=transition_t
+
+ -- blackout
+ if t >= 16 then
+  rectfill(0,0,127,127,0)
+ end
+
+ -- white flash right before room switch
+ if t==transition_switch_t-1 then
+  rectfill(0,0,127,127,7)
+ end
+end
+
+function start_death_respawn()
+ app_state="death_respawn"
+ death_timer=death_respawn_len
+
+ transition_active=false
+ transition_t=0
+ transition_target_room_id=nil
+ clear_particles()
+end
+
+function update_death_respawn()
+ if death_timer > 0 then
+  death_timer -= 1
+ end
+
+ if death_timer <= 0 then
+  init_enemies()
+  respawn_player()
+  app_state="play"
+ end
+end
+
+function death_countdown_number()
+ if death_timer <= 0 then return 0 end
+ return flr((death_timer-1)/30)+1
+end
+
+function start_game_over()
+ app_state="game_over"
+ game_over_sel=1
+
+ transition_active=false
+ transition_t=0
+ transition_target_room_id=nil
+ clear_particles()
+end
+
+function update_game_over_menu()
+ if btnp(2) or btnp(3) then
+  if game_over_sel==1 then
+   game_over_sel=2
+  else
+   game_over_sel=1
+  end
+ end
+
+ if btnp(5) then
+  if game_over_sel==1 then
+   restart_game()
+  else
+   quit_game()
+  end
+ end
+end
+
+function restart_game()
+ lives=start_lives
+ current_room=rooms[1]
+ reset_world_state()
+ init_enemies()
+ respawn_player()
+ apply_dev_start()
+ app_state="play"
+end
+
+function quit_game()
+ app_state="quit"
+end
+
+function take_damage(dmg)
+ if hurt_cooldown > 0 then return end
+ if transition_active then return end
+ if app_state~="play" then return end
+
+ spawn_blood_particles(
+  p.x+p.w/2,
+  p.y+p.h/2,
+  10
+ )
+
+ hp -= dmg
+ hurt_cooldown = hurt_cooldown_len
+
+ if hp <= 0 then
+  lose_life()
+ end
+end
+
+function lose_life()
+ lives -= 1
+
+ if lives < 0 then
+  start_game_over()
+ else
+  start_death_respawn()
+ end
+end
+
+function game_over()
+ start_game_over()
+end
+
+function reset_player()
+ respawn_player()
+end
+
+function _init()
+ lives=start_lives
+ hp=start_hp
+ init_particles()
+ init_enemies()
+ save_initial_map_state()
+ reset_world_state()
+ respawn_player()
+ apply_dev_start()
+ app_state="play"
+end
+
+function _update()
+ update_debug_toggle()
+
+ if app_state=="play" then
+  if transition_active then
+   update_transition()
+  else
+   update_player()
+   update_enemies()
+   update_moving_blocks()
+   update_room_transitions()
+   update_arrival_fx()
+   update_hurt_cooldown()
+   update_hazards()
+   update_particles()
+
+   -- fall death: below current room
+   local room_bottom_px=(current_room.y+current_room.h)*8
+   if p.y > room_bottom_px+32 then
+    lose_life()
+   end
+  end
+
+ elseif app_state=="death_respawn" then
+  update_death_respawn()
+
+ elseif app_state=="game_over" then
+  update_game_over_menu()
+
+ elseif app_state=="quit" then
+  -- intentionally idle
+ end
+end
+
+function _draw()
+ cls(0)
+
+ if app_state=="play" then
+  update_camera()
+
+  draw_background()
+
+  camera(cam_x, cam_y)
+  map(
+   current_room.x,
+   current_room.y,
+   current_room.x*8,
+   current_room.y*8,
+   current_room.w,
+   current_room.h
+  )
+  draw_buttons()
+  draw_doors()
+  draw_moving_blocks()
+  draw_enemies()
+  draw_particles()
+  draw_player()
+  draw_arrival_fx()
+
+  camera(0,0)
+  draw_ui()
+  draw_transition_overlay()
+
+ elseif app_state=="death_respawn" then
+  draw_death_respawn_screen()
+
+ elseif app_state=="game_over" then
+  draw_game_over_screen()
+
+ elseif app_state=="quit" then
+  draw_quit_screen()
+ end
+end
+
+function update_debug_toggle()
+ if btn(4) and btn(5) then
+  debug_hold += 1
+  if debug_hold == debug_hold_frames then
+   debug_hitbox = not debug_hitbox
+  end
+ else
+  debug_hold = 0
+ end
+end

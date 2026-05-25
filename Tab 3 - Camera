@@ -1,0 +1,44 @@
+------------------------------------------------------------
+-- tab 3: camera
+------------------------------------------------------------
+
+-- deadzone in screen coords
+dz_top=40
+dz_bottom=80
+
+function update_camera()
+ local room_px_x = current_room.x * 8
+ local room_px_y = current_room.y * 8
+ local room_px_w = current_room.w * 8
+ local room_px_h = current_room.h * 8
+
+ -- x follow
+ cam_x = p.x + p.w/2 - scr_w/2
+
+ local min_cam_x = room_px_x
+ local max_cam_x = room_px_x + room_px_w - scr_w
+
+ if max_cam_x < min_cam_x then
+  max_cam_x = min_cam_x
+ end
+
+ cam_x = mid(min_cam_x, cam_x, max_cam_x)
+
+ -- y deadzone follow
+ local py_on_screen = (p.y + p.h/2) - cam_y
+
+ if py_on_screen < dz_top then
+  cam_y -= (dz_top - py_on_screen)
+ elseif py_on_screen > dz_bottom then
+  cam_y += (py_on_screen - dz_bottom)
+ end
+
+ local min_cam_y = room_px_y
+ local max_cam_y = room_px_y + room_px_h - view_h
+
+ if max_cam_y < min_cam_y then
+  max_cam_y = min_cam_y
+ end
+
+ cam_y = mid(min_cam_y, cam_y, max_cam_y)
+end

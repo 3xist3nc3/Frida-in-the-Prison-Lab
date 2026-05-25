@@ -1,0 +1,254 @@
+------------------------------------------------------------
+-- tab 5: background + ui
+------------------------------------------------------------
+
+
+-- sparse pillar layout for world 1
+bg_pillars={
+ 24, 72, 128, 184, 248, 312
+}
+
+function draw_background()
+ cls(0)
+
+ local bg_cam_x=flr(cam_x*0.35)
+ local bg_cam_y=flr(cam_y*0.15)
+
+ camera(bg_cam_x,bg_cam_y)
+
+ draw_bg_pillars()
+ draw_bg_abyss()
+
+ camera(0,0)
+end
+
+function draw_bg_pillars()
+ local room_px_x=current_room.x*8
+ local room_px_y=current_room.y*8
+ local room_px_w=current_room.w*8
+ local room_px_h=current_room.h*8
+
+ local top_y=room_px_y+8
+ local bottom_y=room_px_y+room_px_h-1
+
+ for px in all(bg_pillars) do
+  local x=room_px_x+px
+
+  if x > room_px_x-32 and x < room_px_x+room_px_w+32 then
+   rectfill(x,top_y,x+7,bottom_y,1)
+   rectfill(x+2,top_y,x+5,bottom_y,0)
+
+   pset(x+1,top_y,5)
+   pset(x+6,top_y,5)
+
+   rectfill(x-1,top_y,x+8,top_y+2,5)
+   rectfill(x,top_y+3,x+7,top_y+4,1)
+  end
+ end
+end
+
+function draw_bg_abyss()
+ local room_px_x=current_room.x*8
+ local room_px_y=current_room.y*8
+ local room_px_w=current_room.w*8
+ local room_px_h=current_room.h*8
+
+ local abyss_y=room_px_y+room_px_h-40
+
+ rectfill(room_px_x-32,abyss_y,room_px_x+room_px_w+32,room_px_y+room_px_h+32,0)
+
+ rectfill(room_px_x-32,abyss_y-10,room_px_x+room_px_w+32,abyss_y-7,1)
+ rectfill(room_px_x-32,abyss_y-6,room_px_x+room_px_w+32,abyss_y-5,5)
+ rectfill(room_px_x-32,abyss_y-4,room_px_x+room_px_w+32,abyss_y-4,1)
+end
+
+
+function draw_moving_blocks()
+ for mb in all(moving_blocks) do
+  if mb.room_id==current_room.id
+  and (mb.active or mb.done) then
+   for c in all(mb.tiles) do
+    spr(
+     c.t,
+     mb.tx*8+c.x*8,
+     mb.y+c.y*8
+    )
+   end
+  end
+ end
+end
+
+
+function draw_buttons()
+ for b in all(buttons) do
+  if b.room_id==current_room.id then
+   draw_button(b)
+  end
+ end
+end
+
+function draw_button(b)
+ local s = b.is_on and b.on_spr or b.off_spr
+ local x = b.tx*8
+ local y = b.ty*8
+ spr(s,x,y)
+end
+
+function draw_doors()
+ for d in all(doors) do
+  if d.room_id==current_room.id then
+   draw_door(d)
+  end
+ end
+end
+
+function draw_door(d)
+ local s = d.is_open and d.open_spr or d.closed_spr
+ local x = d.tx*8
+ local y = d.ty*8
+
+ -- top half
+ spr(s,x,y,1,1,false,false)
+
+ -- bottom half
+ spr(s,x,y+8,1,1,false,true)
+end
+
+function draw_arrival_fx()
+ if arrival_fx_t <= 0 then return end
+
+ local t=arrival_fx_t
+ local cx=flr(p.x + p.w/2)
+ local top=p.y-2
+ local bot=p.y+p.h+2
+
+ -- bright core first, then fades
+ if t > 10 then
+  rectfill(cx-2,top,cx+2,bot,7)
+ elseif t > 6 then
+  rectfill(cx-1,top,cx+1,bot,12)
+ end
+
+ -- flickering vertical beams
+ if t > 0 then
+  if t % 2 == 0 then
+   line(cx-6,top+1,cx-6,bot-1,12)
+   line(cx+6,top+1,cx+6,bot-1,12)
+  end
+
+  if t % 3 ~= 0 then
+   line(cx-3,top,cx-3,bot,7)
+   line(cx+3,top,cx+3,bot,7)
+  end
+
+  if t > 8 then
+   line(cx,top-2,cx,bot+2,7)
+  elseif t > 3 then
+   line(cx,top,cx,bot,12)
+  end
+ end
+
+ -- small spark pixels around body
+ if t > 4 then
+  pset(cx-5,p.y+2,7)
+  pset(cx+5,p.y+5,12)
+  pset(cx-4,p.y+10,7)
+  pset(cx+4,p.y+13,12)
+ end
+end
+
+ui_y=128-ui_h
+
+ui_bg_col=1
+ui_border_col=0
+ui_inner_border_col=5
+ui_inner_border_2_col=6
+
+function draw_ui_box()
+ rectfill(0,ui_y,127,127,ui_bg_col)
+ rect(0,ui_y-1,127,127,ui_border_col)
+ rect(22,ui_y+1,125,125,ui_inner_border_col)
+ rect(1,ui_y,126,126,ui_inner_border_2_col)
+end
+
+function draw_ui_lives()
+ spr(16,5,ui_y+3)
+ print(lives,16,ui_y+5,9)
+end
+
+function draw_empty_heart(x,y)
+ pal(8,1)
+ pal(9,5)
+ pal(10,6)
+ pal(11,13)
+ pal(12,1)
+ pal(14,5)
+ pal(15,6)
+ spr(32,x,y)
+ pal()
+end
+
+function draw_ui_hp()
+ local hp_x=26
+ local hp_y=ui_y+3
+ local hp_step=10
+
+ -- draw empty/used heart slots first
+ for i=1,max_hp do
+  draw_empty_heart(hp_x+(i-1)*hp_step,hp_y)
+ end
+
+ -- draw current hp on top
+ for i=1,hp do
+  spr(32,hp_x+(i-1)*hp_step,hp_y)
+ end
+end
+
+function draw_ui()
+ draw_ui_box()
+ draw_ui_lives()
+ draw_ui_hp()
+end
+
+function draw_centered_text(txt,y,col)
+ local x=64-#txt*2
+ print(txt,x,y,col)
+end
+
+function draw_death_respawn_screen()
+ cls(0)
+
+ draw_centered_text("ouch, you died!",54,8)
+
+ local n=death_countdown_number()
+ local txt="respawning in "..n.."..."
+ draw_centered_text(txt,112,7)
+end
+
+function draw_game_over_screen()
+ cls(0)
+
+ draw_centered_text("you died completely.",48,8)
+
+ local x1=22
+ local y1=96
+ local w1=36
+ local h1=11
+
+ local x2=70
+ local y2=96
+ local w2=36
+ local h2=11
+
+ rect(x1,y1,x1+w1,y1+h1,game_over_sel==1 and 3 or 5)
+ rect(x2,y2,x2+w2,y2+h2,game_over_sel==2 and 8 or 5)
+
+ print("restart",x1+5,y1+3,7)
+ print("quit",x2+11,y2+3,7)
+end
+
+function draw_quit_screen()
+ cls(0)
+ draw_centered_text("game stopped.",56,8)
+ draw_centered_text("reset cart to play again",112,7)
+end

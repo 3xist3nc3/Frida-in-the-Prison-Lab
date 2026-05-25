@@ -1,0 +1,386 @@
+------------------------------------------------------------
+-- tab 2: physics / collision
+------------------------------------------------------------
+
+function solid_at(px,py)
+ if solid_door_at(px,py) then
+  return true
+ end
+
+ if solid_moving_block_at(px,py) then
+  return true
+ end
+
+ local tx=flr(px/tile)
+ local ty=flr(py/tile)
+ local t=mget(tx,ty)
+ return fget(t,0)
+end
+
+function tile_at_px(px,py)
+ local tx=flr(px/tile)
+ local ty=flr(py/tile)
+ return mget(tx,ty),tx,ty
+end
+
+function tile_is_spike(px,py)
+ local t=tile_at_px(px,py)
+ return t==spike_tile
+end
+
+function hit_spike()
+ local x1=hb_x()
+ local y1=hb_y()
+ local x2=hb_x()+hb_w()-1
+ local y2=hb_y()+hb_h()-1
+
+ return tile_is_spike(x1,y1)
+  or tile_is_spike(x2,y1)
+  or tile_is_spike(x1,y2)
+  or tile_is_spike(x2,y2)
+end
+
+function update_hazards()
+ if hit_spike() then
+--	sfx(02)
+  take_damage(1)
+ end
+end
+
+function point_in_closed_door(px,py,d)
+ if d.is_open then return false end
+ if d.room_id ~= current_room.id then return false end
+
+ local dx=d.tx*8
+ local dy=d.ty*8
+
+ return px>=dx and px<=dx+7
+  and py>=dy and py<=dy+15
+end
+
+function solid_door_at(px,py)
+ for d in all(doors) do
+  if point_in_closed_door(px,py,d) then
+   return true
+  end
+ end
+ return false
+end
+
+function solid_moving_block_at(px,py)
+ for mb in all(moving_blocks) do
+  if mb.room_id==current_room.id
+  and (mb.active or mb.done) then
+   local x1=mb.tx*8
+   local y1=mb.y
+   local x2=x1+mb.w*8-1
+   local y2=y1+mb.h*8-1
+
+   if px>=x1 and px<=x2
+   and py>=y1 and py<=y2 then
+    return true
+   end
+  end
+ end
+
+ return false
+end
+
+function rect_overlap(ax1,ay1,ax2,ay2,bx1,by1,bx2,by2)
+ return ax1<=bx2 and ax2>=bx1
+  and ay1<=by2 and ay2>=by1
+end
+
+function player_in_open_transition_door(d)
+ if not d.is_open then return false end
+ if d.kind~="transition" then return false end
+ if d.room_id~=current_room.id then return false end
+
+ local dx=d.tx*8
+ local dy=d.ty*8
+
+ local px1=dx+2
+ local py1=dy+2
+ local px2=dx+7
+ local py2=dy+13
+
+ local hx1=hb_x()
+ local hy1=hb_y()
+ local hx2=hb_x()+hb_w()-1
+ local hy2=hb_y()+hb_h()-1
+
+ return rect_overlap(hx1,hy1,hx2,hy2,px1,py1,px2,py2)
+end
+
+function update_room_transitions()
+ for d in all(doors) do
+  if player_in_open_transition_door(d) then
+   start_room_transition(d.target_room_id)
+   return
+  end
+ end
+end
+
+function break_crate_at(px,py)
+ local t,tx,ty=tile_at_px(px,py)
+ if t==crate_tile then
+  mset(tx,ty,crate_broken_tile)
+--		sfx(00)
+  spawn_crate_particles(
+   tx*8+4,
+   ty*8+4,
+   p.face,
+   8
+  )
+
+  return true
+ end
+ return false
+end
+
+function point_in_button(px,py,b)
+ if b.room_id ~= current_room.id then return false end
+
+ local bx=b.tx*8
+ local by=b.ty*8
+
+ return px>=bx and px<=bx+7
+  and py>=by and py<=by+7
+end
+
+function find_door_by_id(id)
+ for d in all(doors) do
+  if d.id==id then
+   return d
+  end
+ end
+ return nil
+end
+
+function replace_button_tiles(b)
+ local x0=b.target_area_x
+ local y0=b.target_area_y
+ local w=b.target_area_w
+ local h=b.target_area_h
+
+ for yy=0,h-1 do
+  for xx=0,w-1 do
+   local tx=x0+xx
+   local ty=y0+yy
+   if mget(tx,ty)==b.from_tile then
+    mset(tx,ty,b.to_tile)
+   end
+  end
+ end
+end
+
+function activate_button_at(px,py)
+ for b in all(buttons) do
+  if point_in_button(px,py,b) then
+   if not b.is_on then
+    b.is_on=true
+
+    if b.action=="open_door" then
+--					sfx(01)
+     local d=find_door_by_id(b.target_door_id)
+     if d then
+      d.is_open=true
+     end
+
+    elseif b.action=="replace_tiles" then
+--    sfx(01)
+--    sfx(03)
+      replace_button_tiles(b)
+
+    elseif b.action=="raise_block" then
+--    sfx(01)
+      start_moving_block(b.target_block_id)
+    end
+   end
+   return true
+  end
+ end
+ return false
+end
+
+function find_moving_block_by_id(id)
+ for mb in all(moving_blocks) do
+  if mb.id==id then
+   return mb
+  end
+ end
+ return nil
+end
+
+function start_moving_block(id)
+ local mb=find_moving_block_by_id(id)
+ if not mb then return end
+ if mb.active or mb.done then return end
+
+ mb.tiles={}
+
+ for yy=0,mb.h-1 do
+  for xx=0,mb.w-1 do
+   local tx=mb.tx+xx
+   local ty=mb.ty+yy
+   local t=mget(tx,ty)
+
+   add(mb.tiles,{
+    x=xx,
+    y=yy,
+    t=t
+   })
+
+   mset(tx,ty,0)
+  end
+ end
+
+ mb.y=mb.ty*8
+ mb.active=true
+end
+
+function update_moving_blocks()
+ for mb in all(moving_blocks) do
+  if mb.active then
+   mb.y-=0.5
+
+   local target_y=mb.target_ty*8
+
+   if mb.y<=target_y then
+    mb.y=target_y
+    mb.active=false
+    mb.done=true
+   end
+  end
+ end
+end
+
+function hb_x() return p.x + p.hb_ox end
+function hb_y() return p.y + p.hb_oy end
+function hb_w() return p.hb_w end
+function hb_h() return p.hb_h end
+
+------------------------------------------------------------
+-- edge checks
+------------------------------------------------------------
+
+function solid_on_left(nx)
+ local x=nx + p.hb_ox
+ local y1=hb_y()
+ local y2=hb_y()+flr(hb_h()/2)
+ local y3=hb_y()+hb_h()-1
+ return solid_at(x,y1)
+  or solid_at(x,y2)
+  or solid_at(x,y3)
+end
+
+function solid_on_right(nx)
+ local x=nx + p.hb_ox + p.hb_w - 1
+ local y1=hb_y()
+ local y2=hb_y()+flr(hb_h()/2)
+ local y3=hb_y()+hb_h()-1
+ return solid_at(x,y1)
+  or solid_at(x,y2)
+  or solid_at(x,y3)
+end
+
+function solid_on_top(ny)
+ local y=ny + p.hb_oy
+ local x1=hb_x()
+ local x2=hb_x()+hb_w()-1
+ return solid_at(x1,y)
+  or solid_at(x2,y)
+end
+
+function solid_on_bottom(ny)
+ local y=ny + p.hb_oy + p.hb_h - 1
+ local x1=hb_x()
+ local x2=hb_x()+hb_w()-1
+ return solid_at(x1,y)
+  or solid_at(x2,y)
+end
+
+function ground_below()
+ local y=hb_y()+hb_h()
+ local x1=hb_x()
+ local x2=hb_x()+hb_w()-1
+ return solid_at(x1,y)
+  or solid_at(x2,y)
+end
+
+------------------------------------------------------------
+-- move + collide (x)
+------------------------------------------------------------
+
+function move_x(dx)
+ if dx == 0 then return end
+
+ local step=sgn(dx)
+ local nx=p.x+dx
+
+ if step > 0 then
+  if not solid_on_right(nx) then
+   p.x=nx
+   return
+  end
+
+  while not solid_on_right(p.x+step) do
+   p.x += step
+  end
+ else
+  if not solid_on_left(nx) then
+   p.x=nx
+   return
+  end
+
+  while not solid_on_left(p.x+step) do
+   p.x += step
+  end
+ end
+
+ p.dx=0
+end
+
+------------------------------------------------------------
+-- move + collide (y)
+------------------------------------------------------------
+
+function move_y(dy)
+ p.on_ground=false
+
+ if dy == 0 then
+  if ground_below() then
+   p.on_ground=true
+  end
+  return
+ end
+
+ local step=sgn(dy)
+ local ny=p.y+dy
+
+ if step > 0 then
+  if not solid_on_bottom(ny) then
+   p.y=ny
+   return
+  end
+
+  while not solid_on_bottom(p.y+step) do
+   p.y += step
+  end
+
+  p.on_ground=true
+  p.dy=0
+
+ else
+  if not solid_on_top(ny) then
+   p.y=ny
+   return
+  end
+
+  while not solid_on_top(p.y+step) do
+   p.y += step
+  end
+
+  p.dy=0
+ end
+end

@@ -1,0 +1,326 @@
+------------------------------------------------------------
+-- tab 7: enemies
+------------------------------------------------------------
+
+enemies={}
+
+enemy_spawns={
+{"imp","1-2",58,12,1},
+{"imp","1-2",60,2,-1}
+}
+
+function init_enemies()
+ enemies={}
+
+ for s in all(enemy_spawns) do
+  if s[1]=="imp" then
+   add_imp(s[2],s[3],s[4],s[5])
+  end
+ end
+end
+
+function add_imp(room_id,tx,ty,dir)
+ add(enemies,{
+  type="imp",
+  room_id=room_id,
+
+  x=tx*8,
+  y=ty*8,
+  w=16,
+  h=16,
+
+  hb_ox=3,
+  hb_oy=0,
+  hb_w=10,
+  hb_h=16,
+
+  dir=dir,
+  spd=0.35,
+
+  hp=2,
+  damage=1,
+
+  anim_t=0,
+  hurt_t=0,
+  dead=false,
+
+  atk_t=0,
+  atk_cd=30,
+  atk_hit=false,
+
+  spr_walk1=128,
+  spr_walk2=130,
+  spr_attack=132,
+  spr_dead=134
+ })
+end
+
+
+function update_enemies()
+ for e in all(enemies) do
+  if e.room_id==current_room.id
+  and not e.dead then
+   if e.type=="imp" then
+    update_imp(e)
+   end
+  end
+ end
+end
+
+function update_imp(e)
+ e.anim_t += 1
+
+ if e.hurt_t > 0 then
+  e.hurt_t -= 1
+ end
+
+ if e.atk_cd > 0 then
+  e.atk_cd -= 1
+ end
+
+ if e.atk_t > 0 then
+  update_imp_attack(e)
+  imp_touch_player(e)
+  return
+ end
+
+ local alerted=imp_notice_player(e)
+
+ if alerted and imp_can_attack_player(e) and e.atk_cd<=0 then
+  start_imp_attack(e)
+  imp_touch_player(e)
+  return
+ end
+
+ if alerted then
+  -- face player, but don't walk into walls or pits
+  if not imp_should_turn(e) then
+   e.x += e.dir*e.spd
+  end
+ else
+  -- normal patrol behavior
+  if imp_should_turn(e) then
+   e.dir *= -1
+  end
+
+  e.x += e.dir*e.spd
+
+  if imp_should_turn(e) then
+   e.x -= e.dir*e.spd
+   e.dir *= -1
+  end
+ end
+
+ imp_touch_player(e)
+end
+
+function start_imp_attack(e)
+ e.atk_t=1
+ e.atk_hit=false
+ e.atk_cd=75+flr(rnd(31))
+end
+
+function update_imp_attack(e)
+ e.atk_t += 1
+
+ -- damage once, around the middle of the swing
+ if e.atk_t==7 and not e.atk_hit then
+  if imp_can_attack_player(e) then
+   take_damage(e.damage)
+  end
+  e.atk_hit=true
+ end
+
+ if e.atk_t>=16 then
+  e.atk_t=0
+  e.atk_hit=false
+ end
+end
+
+function imp_can_attack_player(e)
+ local ecx=e.x+8
+ local ecy=e.y+8
+ local pcx=p.x+p.w/2
+ local pcy=p.y+p.h/2
+
+ if abs(pcy-ecy)>16 then return false end
+
+ if e.dir==1 then
+  return pcx>=ecx and pcx<=ecx+18
+ else
+  return pcx<=ecx and pcx>=ecx-18
+ end
+end
+
+function imp_notice_player(e)
+ local ecx=e.x+8
+ local ecy=e.y+8
+ local pcx=p.x+p.w/2
+ local pcy=p.y+p.h/2
+
+ if abs(pcy-ecy) > 18 then return false end
+ if abs(pcx-ecx) > 32 then return false end
+
+ -- face player when close
+ if pcx < ecx then
+  e.dir=-1
+ else
+  e.dir=1
+ end
+
+ return true
+end
+
+function imp_should_turn(e)
+ return imp_wall_ahead(e)
+  or not imp_ground_ahead(e)
+end
+
+function imp_wall_ahead(e)
+ local ax
+
+ if e.dir==1 then
+  ax=e.x+e.hb_ox+e.hb_w
+ else
+  ax=e.x+e.hb_ox-1
+ end
+
+ local y1=e.y+e.hb_oy+3
+ local y2=e.y+e.hb_oy+e.hb_h-3
+
+ return solid_at(ax,y1)
+  or solid_at(ax,y2)
+end
+
+function imp_ground_ahead(e)
+ local ax
+
+ if e.dir==1 then
+  ax=e.x+e.hb_ox+e.hb_w
+ else
+  ax=e.x+e.hb_ox-1
+ end
+
+ local ay=e.y+e.hb_oy+e.hb_h+1
+
+ return solid_at(ax,ay)
+end
+
+function imp_touch_player(e)
+ local ex1=e.x+e.hb_ox-1
+ local ey1=e.y+e.hb_oy
+ local ex2=e.x+e.hb_ox+e.hb_w
+ local ey2=e.y+e.hb_oy+e.hb_h-1
+
+ local px1=hb_x()
+ local py1=hb_y()
+ local px2=hb_x()+hb_w()-1
+ local py2=hb_y()+hb_h()-1
+
+ if rect_overlap(ex1,ey1,ex2,ey2,px1,py1,px2,py2) then
+  take_damage(e.damage)
+ end
+end
+
+function hit_enemy_at(px,py)
+ for e in all(enemies) do
+  if e.room_id==current_room.id
+  and not e.dead then
+   if point_in_enemy(px,py,e) then
+    damage_enemy(e,1)
+    return true
+   end
+  end
+ end
+
+ return false
+end
+
+function point_in_enemy(px,py,e)
+ local ex1=e.x+e.hb_ox
+ local ey1=e.y+e.hb_oy
+ local ex2=e.x+e.hb_ox+e.hb_w-1
+ local ey2=e.y+e.hb_oy+e.hb_h-1
+
+ return px>=ex1 and px<=ex2
+  and py>=ey1 and py<=ey2
+end
+
+function damage_enemy(e,dmg)
+ if e.hurt_t > 0 then
+  return
+ end
+
+ e.hp -= dmg
+ e.hurt_t=10
+ e.atk_t=0
+
+ spawn_blood_particles(e.x+8,e.y+8,6)
+
+ if e.hp <= 0 then
+  kill_enemy(e)
+ end
+end
+
+function kill_enemy(e)
+ e.dead=true
+ e.atk_t=0
+
+ spawn_blood_particles(
+  e.x+8,
+  e.y+8,
+  14
+ )
+end
+
+function draw_enemies()
+ for e in all(enemies) do
+  if e.room_id==current_room.id then
+   if e.type=="imp" then
+    draw_imp(e)
+   end
+  end
+ end
+end
+
+function draw_imp(e)
+ if e.dead then
+  spr(e.spr_dead,e.x,e.y+8,2,1,e.dir==-1,false)
+  return
+ end
+
+ if e.hurt_t > 0 then
+  if flr(e.hurt_t/2)%2==0 then
+   return
+  end
+ end
+
+ local s
+
+ if e.atk_t > 0 then
+  s=e.spr_attack
+ else
+  local phase=flr((e.anim_t/12)%2)
+
+  if phase==0 then
+   s=e.spr_walk1
+  else
+   s=e.spr_walk2
+  end
+ end
+
+ -- sprites face right, so flip when walking/attacking left
+ local flip_x=(e.dir==-1)
+
+ spr(s,e.x,e.y,2,2,flip_x,false)
+
+ if debug_hitbox then
+  rect(
+   e.x+e.hb_ox,
+   e.y+e.hb_oy,
+   e.x+e.hb_ox+e.hb_w-1,
+   e.y+e.hb_oy+e.hb_h-1,
+   8
+  )
+ end
+end
