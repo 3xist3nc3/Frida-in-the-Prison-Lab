@@ -40,10 +40,39 @@ function hit_spike()
   or tile_is_spike(x2,y2)
 end
 
+function player_in_death_zone(z)
+ if z.room_id~=current_room.id then return false end
+
+ local zx1=z.tx*8
+ local zy1=z.ty*8
+ local zx2=zx1+z.w*8-1
+ local zy2=zy1+z.h*8-1
+
+ local px1=hb_x()
+ local py1=hb_y()
+ local px2=hb_x()+hb_w()-1
+ local py2=hb_y()+hb_h()-1
+
+ return rect_overlap(px1,py1,px2,py2,zx1,zy1,zx2,zy2)
+end
+
+function hit_death_zone()
+ for z in all(death_zones) do
+  if player_in_death_zone(z) then
+   return true
+  end
+ end
+ return false
+end
+
 function update_hazards()
  if hit_spike() then
 --	sfx(02)
   take_damage(1)
+ end
+
+ if hit_death_zone() then
+  lose_life()
  end
 end
 
@@ -195,6 +224,13 @@ function activate_button_at(px,py)
     elseif b.action=="raise_block" then
 --    sfx(01)
       start_moving_block(b.target_block_id)
+
+      if b.target_door_id then
+       local d=find_door_by_id(b.target_door_id)
+       if d then
+        d.is_open=true
+       end
+      end
     end
    end
    return true

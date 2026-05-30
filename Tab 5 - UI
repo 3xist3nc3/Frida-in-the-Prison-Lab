@@ -11,30 +11,27 @@ bg_pillars={
 function draw_background()
  cls(0)
 
- local bg_cam_x=flr(cam_x*0.35)
- local bg_cam_y=flr(cam_y*0.15)
+ -- transition rooms have their own lab style,
+ -- so no world parallax background here
+ if current_room.id=="1-2" then
+  return
+ end
 
- camera(bg_cam_x,bg_cam_y)
+ bg_ox=-flr((cam_x-current_room.x*8)*0.35)
+ bg_oy=-flr((cam_y-current_room.y*8)*0.15)
 
  draw_bg_pillars()
  draw_bg_abyss()
-
- camera(0,0)
 end
 
 function draw_bg_pillars()
- local room_px_x=current_room.x*8
- local room_px_y=current_room.y*8
- local room_px_w=current_room.w*8
- local room_px_h=current_room.h*8
-
- local top_y=room_px_y+8
- local bottom_y=room_px_y+room_px_h-1
+ local top_y=8+bg_oy
+ local bottom_y=view_h-1
 
  for px in all(bg_pillars) do
-  local x=room_px_x+px
+  local x=px+bg_ox
 
-  if x > room_px_x-32 and x < room_px_x+room_px_w+32 then
+  if x > -32 and x < 160 then
    rectfill(x,top_y,x+7,bottom_y,1)
    rectfill(x+2,top_y,x+5,bottom_y,0)
 
@@ -48,18 +45,13 @@ function draw_bg_pillars()
 end
 
 function draw_bg_abyss()
- local room_px_x=current_room.x*8
- local room_px_y=current_room.y*8
- local room_px_w=current_room.w*8
- local room_px_h=current_room.h*8
+ local abyss_y=view_h-40+bg_oy
 
- local abyss_y=room_px_y+room_px_h-40
+ rectfill(-32,abyss_y,160,view_h+32,0)
 
- rectfill(room_px_x-32,abyss_y,room_px_x+room_px_w+32,room_px_y+room_px_h+32,0)
-
- rectfill(room_px_x-32,abyss_y-10,room_px_x+room_px_w+32,abyss_y-7,1)
- rectfill(room_px_x-32,abyss_y-6,room_px_x+room_px_w+32,abyss_y-5,5)
- rectfill(room_px_x-32,abyss_y-4,room_px_x+room_px_w+32,abyss_y-4,1)
+ rectfill(-32,abyss_y-10,160,abyss_y-7,1)
+ rectfill(-32,abyss_y-6,160,abyss_y-5,5)
+ rectfill(-32,abyss_y-4,160,abyss_y-4,1)
 end
 
 

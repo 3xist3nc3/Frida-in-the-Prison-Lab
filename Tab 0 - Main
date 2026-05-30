@@ -100,10 +100,31 @@ rooms={
   h=16,
   spawn_tx=50,
   spawn_ty=12
+ },
+
+ {
+  id="1-3",
+  x=0,
+  y=16,
+  w=31,
+  h=16,
+  spawn_tx=2,
+  spawn_ty=28
  }
 }
 
 current_room=rooms[1]
+
+-- death zones
+death_zones={
+ {
+  room_id="1-1",
+  tx=19,
+  ty=16,
+  w=4,
+  h=1
+ }
+}
 
 -- door sprites (world 1)
 door_w1_closed_spr=112
@@ -151,6 +172,18 @@ doors={
   is_open=false,
   kind="transition",
   target_room_id="1-2"
+ },
+
+ {
+  id="transition_door_2",
+  room_id="1-2",
+  tx=63,
+  ty=12,
+  closed_spr=transition_door_closed_spr,
+  open_spr=transition_door_open_spr,
+  is_open=false,
+  kind="transition",
+  target_room_id="1-3"
  }
 }
 
@@ -220,7 +253,8 @@ buttons={
   on_spr=button_on_spr,
   is_on=false,
   action="raise_block",
-  target_block_id="block_1_2_door"
+  target_block_id="block_1_2_door",
+  target_door_id="transition_door_2"
  }
 }
 
