@@ -3,16 +3,38 @@
 ------------------------------------------------------------
 
 enemies={}
+enemy_defs={}
 
-enemy_spawns={
-{"imp","1-2",58,12,1},
-{"imp","1-2",60,2,-1}
-}
+imp_r_marker=191
+imp_l_marker=190
+
+function scan_enemy_markers()
+ enemy_defs={}
+
+ for r in all(rooms) do
+  for yy=0,r.h-1 do
+   for xx=0,r.w-1 do
+    local tx=r.x+xx
+    local ty=r.y+yy
+    local t=mget(tx,ty)
+
+    if t==imp_r_marker then
+     add(enemy_defs,{"imp",r.id,tx,ty,1})
+     mset(tx,ty,0)
+
+    elseif t==imp_l_marker then
+     add(enemy_defs,{"imp",r.id,tx,ty,-1})
+     mset(tx,ty,0)
+    end
+   end
+  end
+ end
+end
 
 function init_enemies()
  enemies={}
 
- for s in all(enemy_spawns) do
+ for s in all(enemy_defs) do
   if s[1]=="imp" then
    add_imp(s[2],s[3],s[4],s[5])
   end

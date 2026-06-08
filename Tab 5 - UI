@@ -244,3 +244,37 @@ function draw_quit_screen()
  draw_centered_text("game stopped.",56,8)
  draw_centered_text("reset cart to play again",112,7)
 end
+
+msg_on=false
+msg_lines={}
+
+function show_msg(lines)
+ msg_lines=lines
+ msg_on=true
+end
+
+function update_msg()
+ if btnp(4) or btnp(5) then
+  msg_on=false
+ end
+end
+
+function draw_msg()
+ if not msg_on then return end
+
+ local x=13
+ local y=31
+ local w=102
+ local h=66
+
+ rectfill(x,y,x+w,y+h,1)
+ rect(x,y,x+w,y+h,11)
+
+ for i=1,#msg_lines do
+  local txt=msg_lines[i]
+  local tx=64-#txt*2
+  print(txt,tx,y+3+i*7,9)
+ end
+
+-- print("press jump / action",32,y+h-8,5)
+end

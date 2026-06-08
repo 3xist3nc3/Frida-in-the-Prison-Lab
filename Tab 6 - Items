@@ -1,0 +1,192 @@
+------------------------------------------------------------
+-- tab 6: items / pickups / stars
+------------------------------------------------------------
+
+pickups={}
+pickup_defs={}
+stars={}
+
+has_star=false
+star_ammo=0
+
+heart_marker=188
+star_marker=189
+
+spr_star1=47
+spr_star2=63
+
+function scan_pickup_markers()
+ pickup_defs={}
+
+ for r in all(rooms) do
+  for yy=0,r.h-1 do
+   for xx=0,r.w-1 do
+    local tx=r.x+xx
+    local ty=r.y+yy
+    local t=mget(tx,ty)
+
+    if t==heart_marker then
+     add(pickup_defs,{"heart",r.id,tx,ty})
+     mset(tx,ty,0)
+
+    elseif t==star_marker then
+     add(pickup_defs,{"star",r.id,tx,ty})
+     mset(tx,ty,0)
+    end
+   end
+  end
+ end
+end
+
+function reset_item_state()
+ has_star=false
+ star_ammo=0
+ stars={}
+ init_pickups()
+end
+
+function clear_stars()
+ stars={}
+end
+
+function init_pickups()
+ pickups={}
+
+ for d in all(pickup_defs) do
+  add(pickups,{
+   type=d[1],
+   room_id=d[2],
+   x=d[3]*8,
+   y=d[4]*8,
+   active=true,
+   t=flr(rnd(20))
+  })
+ end
+end
+
+function update_pickups()
+ for it in all(pickups) do
+  if it.active
+  and it.room_id==current_room.id then
+   it.t+=1
+
+   if player_touch_pickup(it) then
+    collect_pickup(it)
+   end
+  end
+ end
+end
+
+function player_touch_pickup(it)
+ return rect_overlap(
+  hb_x(),hb_y(),
+  hb_x()+hb_w()-1,hb_y()+hb_h()-1,
+  it.x,it.y,it.x+7,it.y+7
+ )
+end
+
+function collect_pickup(it)
+ if it.type=="heart" then
+  if hp>=max_hp then return end
+  hp+=1
+  it.active=false
+--  sfx(06)
+
+ elseif it.type=="star" then
+  star_ammo+=1
+  it.active=false
+--  sfx(06)
+
+  if not has_star then
+   has_star=true
+   show_star_msg()
+  end
+ end
+end
+
+function try_throw_star()
+ if not has_star then return false end
+ if star_ammo<=0 then return false end
+
+ star_ammo-=1
+ p.star_throw_t=6
+
+ local dir=p.face
+ local sx=p.x+(dir==1 and 13 or -5)
+ local sy=p.y+9
+
+ add(stars,{
+  room_id=current_room.id,
+  x=sx,
+  y=sy,
+  dx=dir*2.5,
+  t=0
+ })
+
+ return true
+end
+
+function update_stars()
+ for s in all(stars) do
+  if s.room_id~=current_room.id then
+   del(stars,s)
+  else
+   s.x+=s.dx
+   s.t+=1
+
+   if hit_enemy_at(s.x,s.y+4) then
+    del(stars,s)
+   elseif solid_at(s.x,s.y+4) then
+    del(stars,s)
+   elseif s.t>60 then
+    del(stars,s)
+   end
+  end
+ end
+end
+
+function draw_pickups()
+ for it in all(pickups) do
+  if it.active
+  and it.room_id==current_room.id then
+   draw_pickup(it)
+  end
+ end
+end
+
+function draw_pickup(it)
+ local s
+
+ if it.type=="heart" then
+  s=32
+  if flr(it.t/12)%2==1 then s=48 end
+
+ elseif it.type=="star" then
+  s=spr_star1
+  if flr(it.t/8)%2==1 then s=spr_star2 end
+ end
+
+ spr(s,it.x,it.y)
+end
+
+function draw_stars()
+ for s in all(stars) do
+  if s.room_id==current_room.id then
+   local sp=spr_star1
+   if flr(s.t/4)%2==1 then sp=spr_star2 end
+   spr(sp,s.x,s.y)
+  end
+ end
+end
+
+function show_star_msg()
+ show_msg({
+  "new ability unlocked",
+  "",
+  "you can now collect",
+  "and throw bladed stars.",
+  "",
+  "while crouching,",
+  "press action to throw."
+ })
+end

@@ -42,6 +42,13 @@ p={
  spr_jump_up=11,
  spr_fall=13,
 
+  -- crouch
+ spr_crouch1=37,
+ spr_crouch2=39,
+ crouching=false,
+ star_throw_t=0,
+ crouching=false,
+
  -- attack state
  has_sword=false,
  attack_type="",
@@ -56,12 +63,28 @@ p={
 function update_player()
  local left=btn(0)
  local right=btn(1)
+ local down=btn(3)
 
  local jump_pressed=btnp(4)
  local jump_held=btn(4)
  local attack_pressed=btnp(5)
 
- if attack_pressed and not attack_active() then
+ p.crouching = down and p.on_ground
+ local can_move = (p.attack_lock <= 0)
+  and not p.crouching
+
+ if p.crouching then
+  p.dx=0
+ end
+
+ if p.star_throw_t > 0 then
+  p.star_throw_t-=1
+ end
+
+ if attack_pressed and p.crouching then
+  try_throw_star()
+ elseif attack_pressed and not attack_active()
+ and not p.crouching then
   start_attack()
  end
 
@@ -115,6 +138,10 @@ function update_player()
  p.dy += grav
  if p.dy > max_fall then p.dy=max_fall end
 
+if p.crouching then
+ p.dx=0
+end
+
  move_x(p.dx)
  move_y(p.dy)
 
@@ -144,6 +171,12 @@ function update_anim()
   else
    p.anim="fall"
   end
+  return
+ end
+
+ if p.crouching then
+  p.anim="crouch"
+  p.anim_t=0
   return
  end
 
@@ -295,6 +328,13 @@ function draw_player()
 
  elseif p.anim=="fall" then
   s=p.spr_fall
+
+ elseif p.anim=="crouch" then
+  if p.star_throw_t > 0 then
+   s=p.spr_crouch2
+  else
+   s=p.spr_crouch1
+  end
 
  elseif p.anim=="kick_ground" then
   if p.attack_t < 4 then

@@ -469,6 +469,8 @@ function update_death_respawn()
 
  if death_timer <= 0 then
   init_enemies()
+  init_pickups()
+  clear_stars()
   respawn_player()
   app_state="play"
  end
@@ -512,6 +514,7 @@ function restart_game()
  current_room=rooms[1]
  reset_world_state()
  init_enemies()
+ reset_item_state()
  respawn_player()
  apply_dev_start()
  app_state="play"
@@ -562,7 +565,10 @@ function _init()
  lives=start_lives
  hp=start_hp
  init_particles()
+ scan_enemy_markers()
+ scan_pickup_markers()
  init_enemies()
+ reset_item_state()
  save_initial_map_state()
  reset_world_state()
  respawn_player()
@@ -573,12 +579,19 @@ end
 function _update()
  update_debug_toggle()
 
+  if msg_on then
+  update_msg()
+  return
+ end
+
  if app_state=="play" then
   if transition_active then
    update_transition()
   else
    update_player()
    update_enemies()
+   update_pickups()
+   update_stars()
    update_moving_blocks()
    update_room_transitions()
    update_arrival_fx()
@@ -624,6 +637,8 @@ function _draw()
   draw_buttons()
   draw_doors()
   draw_moving_blocks()
+  draw_pickups()
+  draw_stars()
   draw_enemies()
   draw_particles()
   draw_player()
@@ -632,6 +647,7 @@ function _draw()
   camera(0,0)
   draw_ui()
   draw_transition_overlay()
+  draw_msg()
 
  elseif app_state=="death_respawn" then
   draw_death_respawn_screen()
