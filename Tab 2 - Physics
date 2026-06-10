@@ -2,19 +2,22 @@
 -- tab 2: physics / collision
 ------------------------------------------------------------
 
-function solid_at(px,py)
- if solid_door_at(px,py) then
-  return true
+function solid_plat_at(px,py)
+ for pl in all(plats) do
+  if pl.room_id==current_room.id then
+   local x1=pl.x
+   local y1=pl.y
+   local x2=x1+pl.w*8-1
+   local y2=y1+7
+
+   if px>=x1 and px<=x2
+   and py>=y1 and py<=y2 then
+    return true
+   end
+  end
  end
 
- if solid_moving_block_at(px,py) then
-  return true
- end
-
- local tx=flr(px/tile)
- local ty=flr(py/tile)
- local t=mget(tx,ty)
- return fget(t,0)
+ return false
 end
 
 function tile_at_px(px,py)
@@ -90,6 +93,38 @@ end
 function solid_door_at(px,py)
  for d in all(doors) do
   if point_in_closed_door(px,py,d) then
+   return true
+  end
+ end
+ return false
+end
+
+function solid_at(px,py)
+ if solid_door_at(px,py) then
+  return true
+ end
+
+ if solid_button_at(px,py) then
+  return true
+ end
+
+ if solid_moving_block_at(px,py) then
+  return true
+ end
+
+ if solid_plat_at(px,py) then
+  return true
+ end
+
+ local tx=flr(px/tile)
+ local ty=flr(py/tile)
+ local t=mget(tx,ty)
+ return fget(t,0)
+end
+
+function solid_button_at(px,py)
+ for b in all(buttons) do
+  if point_in_button(px,py,b) then
    return true
   end
  end
@@ -186,6 +221,16 @@ function find_door_by_id(id)
  return nil
 end
 
+function open_room_transition(room_id)
+ for d in all(doors) do
+  if d.room_id==room_id
+  and d.kind=="transition" then
+   d.is_open=true
+   return
+  end
+ end
+end
+
 function replace_button_tiles(b)
  local x0=b.target_area_x
  local y0=b.target_area_y
@@ -221,17 +266,11 @@ function activate_button_at(px,py)
 --    sfx(03)
       replace_button_tiles(b)
 
-    elseif b.action=="raise_block" then
+elseif b.action=="raise_block" then
 --    sfx(01)
-      start_moving_block(b.target_block_id)
-
-      if b.target_door_id then
-       local d=find_door_by_id(b.target_door_id)
-       if d then
-        d.is_open=true
-       end
-      end
-    end
+ start_moving_block(b.target_block_id)
+ open_room_transition(b.room_id)
+end
    end
    return true
   end

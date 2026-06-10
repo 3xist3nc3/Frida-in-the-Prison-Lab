@@ -4,9 +4,9 @@
 
 -- dev start
 dev_start=true
-dev_room_id="1-2"
-dev_spawn_tx=50
-dev_spawn_ty=12
+dev_room_id="1-3"
+dev_spawn_tx=2
+dev_spawn_ty=28
 
 
 -- constants / settings
@@ -126,6 +126,10 @@ death_zones={
  }
 }
 
+plat_marker=187
+plat_defs={}
+plats={}
+
 -- door sprites (world 1)
 door_w1_closed_spr=112
 door_w1_open_spr=113
@@ -139,80 +143,10 @@ button_off_spr=124
 button_on_spr=125
 
 -- doors
-doors={
- {
-  id="door_1",
-  room_id="1-1",
-  tx=43,
-  ty=1,
-  closed_spr=door_w1_closed_spr,
-  open_spr=door_w1_open_spr,
-  is_open=false,
-  kind="normal"
- },
-
- {
-  id="door_2",
-  room_id="1-1",
-  tx=28,
-  ty=5,
-  closed_spr=door_w1_closed_spr,
-  open_spr=door_w1_open_spr,
-  is_open=false,
-  kind="normal"
- },
-
- {
-  id="transition_door_1",
-  room_id="1-1",
-  tx=1,
-  ty=13,
-  closed_spr=transition_door_closed_spr,
-  open_spr=transition_door_open_spr,
-  is_open=false,
-  kind="transition",
-  target_room_id="1-2"
- },
-
- {
-  id="transition_door_2",
-  room_id="1-2",
-  tx=63,
-  ty=12,
-  closed_spr=transition_door_closed_spr,
-  open_spr=transition_door_open_spr,
-  is_open=false,
-  kind="transition",
-  target_room_id="1-3"
- }
-}
+doors={}
 
 -- buttons
 buttons={
- {
-  id="button_1",
-  room_id="1-1",
-  tx=37,
-  ty=1,
-  off_spr=button_off_spr,
-  on_spr=button_on_spr,
-  is_on=false,
-  action="open_door",
-  target_door_id="door_1"
- },
-
- {
-  id="button_2",
-  room_id="1-1",
-  tx=10,
-  ty=9,
-  off_spr=button_off_spr,
-  on_spr=button_on_spr,
-  is_on=false,
-  action="open_door",
-  target_door_id="door_2"
- },
-
  {
   id="button_3",
   room_id="1-1",
@@ -230,18 +164,6 @@ buttons={
 
   from_tile=spike_tile,
   to_tile=safe_floor_tile
- },
-
- {
-  id="button_4",
-  room_id="1-1",
-  tx=6,
-  ty=10,
-  off_spr=button_off_spr,
-  on_spr=button_on_spr,
-  is_on=false,
-  action="open_door",
-  target_door_id="transition_door_1"
  },
 
  {
@@ -301,6 +223,180 @@ function find_room_by_id(id)
   end
  end
  return nil
+end
+
+function next_room_id(id)
+ for i=1,#rooms-1 do
+  if rooms[i].id==id then
+   return rooms[i+1].id
+  end
+ end
+ return nil
+end
+
+function scan_door_button_markers()
+ for r in all(rooms) do
+  local rd={}
+  local rb={}
+
+  for yy=0,r.h-1 do
+   for xx=0,r.w-1 do
+    local tx=r.x+xx
+    local ty=r.y+yy
+    local t=mget(tx,ty)
+
+    if t==door_w1_closed_spr
+    or t==transition_door_closed_spr then
+     local trans=(t==transition_door_closed_spr)
+
+     local d={
+      id="door_"..(#doors+1),
+      room_id=r.id,
+      tx=tx,
+      ty=ty,
+      closed_spr=t,
+      open_spr=trans and transition_door_open_spr or door_w1_open_spr,
+      is_open=false,
+      kind=trans and "transition" or "normal",
+      target_room_id=trans and next_room_id(r.id) or nil
+     }
+
+     add(doors,d)
+     add(rd,d)
+
+     mset(tx,ty,0)
+     mset(tx,ty+1,0)
+
+    elseif t==button_off_spr then
+     local b={
+      id="button_"..(#buttons+1),
+      room_id=r.id,
+      tx=tx,
+      ty=ty,
+      off_spr=button_off_spr,
+      on_spr=button_on_spr,
+      is_on=false,
+      action="open_door"
+     }
+
+     add(buttons,b)
+     add(rb,b)
+
+     mset(tx,ty,0)
+    end
+   end
+  end
+
+  for i=1,min(#rb,#rd) do
+   rb[i].target_door_id=rd[i].id
+  end
+ end
+end
+
+function scan_plat_markers()
+plat_defs={}
+
+for r in all(rooms) do
+for yy=0,r.h-1 do
+ for xx=0,r.w-1 do
+  local tx=r.x+xx
+  local ty=r.y+yy
+
+  if mget(tx,ty)==plat_marker
+  and mget(tx-1,ty)~=plat_marker then
+   add(plat_defs,{
+    room_id=r.id,
+    tx=tx,
+    ty=ty,
+    w=2,
+    range=17*8
+   })
+
+   mset(tx,ty,0)
+   mset(tx+1,ty,0)
+  end
+ end
+end
+end
+end
+
+function init_plats()
+plats={}
+
+for d in all(plat_defs) do
+add(plats,{
+ room_id=d.room_id,
+ x=d.tx*8,
+ y=d.ty*8,
+ sx=d.tx*8,
+ ex=d.tx*8+d.range,
+ w=d.w,
+ dx=0.35
+})
+end
+end
+
+function update_plats()
+for pl in all(plats) do
+if pl.room_id==current_room.id then
+ local oldx=pl.x
+
+ pl.x+=pl.dx
+
+ if pl.x<=pl.sx then
+  pl.x=pl.sx
+  pl.dx=abs(pl.dx)
+ elseif pl.x>=pl.ex then
+  pl.x=pl.ex
+  pl.dx=-abs(pl.dx)
+ end
+
+ local mdx=pl.x-oldx
+
+ -- carry player if standing on platform
+ local py=hb_y()+hb_h()
+ local px1=hb_x()
+ local px2=hb_x()+hb_w()-1
+ local x1=pl.x
+ local x2=pl.x+pl.w*8-1
+
+if py>=pl.y-1 and py<=pl.y+2
+and px2>=x1 and px1<=x2
+and p.dy>=0 then
+ move_x(mdx)
+ end
+end
+end
+end
+
+function link_button_to_door(room_id,btx,bty,dtx,dty)
+ local b=nil
+ local d=nil
+
+ for x in all(buttons) do
+  if x.room_id==room_id
+  and x.tx==btx
+  and x.ty==bty then
+   b=x
+  end
+ end
+
+ for x in all(doors) do
+  if x.room_id==room_id
+  and x.tx==dtx
+  and x.ty==dty then
+   d=x
+  end
+ end
+
+ if b and d then
+  b.target_door_id=d.id
+ end
+end
+
+function fix_door_links()
+ link_button_to_door("1-1",10,9,28,5)
+ link_button_to_door("1-1",6,10,1,13)
 end
 
 function save_initial_map_state()
@@ -469,6 +565,7 @@ function update_death_respawn()
 
  if death_timer <= 0 then
   init_enemies()
+  init_plats()
   init_pickups()
   clear_stars()
   respawn_player()
@@ -514,6 +611,7 @@ function restart_game()
  current_room=rooms[1]
  reset_world_state()
  init_enemies()
+ init_plats()
  reset_item_state()
  respawn_player()
  apply_dev_start()
@@ -567,7 +665,11 @@ function _init()
  init_particles()
  scan_enemy_markers()
  scan_pickup_markers()
+ scan_door_button_markers()
+ scan_plat_markers()
+ fix_door_links()
  init_enemies()
+ init_plats()
  reset_item_state()
  save_initial_map_state()
  reset_world_state()
@@ -588,6 +690,7 @@ function _update()
   if transition_active then
    update_transition()
   else
+   update_plats()
    update_player()
    update_enemies()
    update_pickups()
@@ -637,6 +740,7 @@ function _draw()
   draw_buttons()
   draw_doors()
   draw_moving_blocks()
+  draw_plats()
   draw_pickups()
   draw_stars()
   draw_enemies()

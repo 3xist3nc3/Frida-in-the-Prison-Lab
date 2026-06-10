@@ -8,6 +8,7 @@ stars={}
 
 has_star=false
 star_ammo=0
+max_star_ammo=99
 
 heart_marker=188
 star_marker=189
@@ -92,16 +93,20 @@ function collect_pickup(it)
   it.active=false
 --  sfx(06)
 
- elseif it.type=="star" then
-  star_ammo+=1
-  it.active=false
+elseif it.type=="star" then
+ if star_ammo>=max_star_ammo then
+  return
+ end
+
+ star_ammo+=1
+ it.active=false
 --  sfx(06)
 
-  if not has_star then
-   has_star=true
-   show_star_msg()
-  end
+ if not has_star then
+  has_star=true
+  show_star_msg()
  end
+end
 end
 
 function try_throw_star()
@@ -113,7 +118,7 @@ function try_throw_star()
 
  local dir=p.face
  local sx=p.x+(dir==1 and 13 or -5)
- local sy=p.y+9
+ local sy=p.y+7
 
  add(stars,{
   room_id=current_room.id,
